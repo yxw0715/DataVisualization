@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Premier League Team Performance (2015-2024)</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    .chart-container {
+      max-width: 1000px;
+      margin: auto;
+    }
+    .tooltip {
+      position: absolute;
+      background-color: white;
+      border: 1px solid #ccc;
+      padding: 8px;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+    }
+    select {
+      margin-bottom: 10px;
+      padding: 5px;
+    }
+  </style>
+</head>
+<body>
+<div class="chart-container">
+  <h2>Premier League Team Performance (2015-2024)</h2>
+  <label for="teamSelect">Select Team(s):</label>
+  <select id="teamSelect" multiple size="10"></select>
+  <svg width="960" height="500"></svg>
+  <div class="tooltip" id="tooltip"></div>
+</div>
+
+<script>
+  const margin = {top: 40, right: 100, bottom: 50, left: 60},
+        width = 960 - margin.left - margin.right,
+        height = 500 - margin.top - margin.bottom;
+
+  const svg = d3.select("svg")
+    .append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const tooltip = d3.select("#tooltip");
+
+  d3.csv("pl-tables-1993-2024.csv").then(data => {
+    data = data.filter(d => +d.season_end_year >= 2015);
+    data.forEach(d => {
+      d.season_end_year = +d.season_end_year;
+      d.points = +d.points;
+    });
+
+    const teams = Array.from(new Set(data.map(d => d.team))).sort();
+    const select = d3.select("#teamSelect");
+    teams.forEach(team => {
+      select.append("option").text(team).attr("value", team);
+    });
+
+    const x = d3.scaleLinear()
+      .domain(d3.extent(data, d => d.season_end_year))
+      .range([0, width]);
+
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.points)]).nice()
+      .range([height, 0]);
+
+    svg.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(x).tickFormat(d3.format("d")));
+    svg.append("g").call(d3.axisLeft(y));
+
+    svg.append("text")
+      .attr("x", width / 2)
+      .attr("y", height + 40)
+      .attr("text-anchor", "middle")
+      .text("Season");
+
+    svg.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("x", -height / 2)
+      .attr("y", -40)
+      .attr("text-anchor", "middle")
+      .text("Points");
+
+    const color = d3.scaleOrdinal(d3.schemeTableau10);
+
+    function updateChart(selectedTeams) {
+      svg.selectAll(".line").remove();
+
+      selectedTeams.forEach(team => {
+        const teamData = data.filter(d => d.team === team);
+
+        svg.append("path")
+          .datum(teamData)
+          .attr("fill", "none")
+          .attr("stroke", color(team))
+          .attr("stroke-width", 2.5)
+          .attr("class", "line")
+          .attr("d", d3.line()
+            .x(d => x(d.season_end_year))
+            .y(d => y(d.points)));
+
+        svg.selectAll(`.dot-${team.replace(/\s+/g, '')}`)
+          .data(teamData)
+          .join("circle")
+          .attr("cx", d => x(d.season_end_year))
+          .attr("cy", d => y(d.points))
+          .attr("r", 4)
+          .attr("fill", color(team))
+          .on("mouseover", (event, d) => {
+            tooltip.transition().duration(200).style("opacity", 1);
+            tooltip.html(`Team: ${d.team}<br>Year: ${d.season_end_year}<br>Points: ${d.points}`)
+              .style("left", (event.pageX + 10) + "px")
+              .style("top", (event.pageY - 28) + "px");
+          })
+          .on("mouseout", () => {
+            tooltip.transition().duration(300).style("opacity", 0);
+          });
+      });
+    }
+
+    select.on("change", function() {
+      const selectedOptions = Array.from(this.selectedOptions).map(opt => opt.value);
+      updateChart(selectedOptions);
+    });
+  });
+</script>
+</body>
+</html>
